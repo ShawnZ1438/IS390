@@ -1,0 +1,61 @@
+seed: 42
+
+data:
+  root: ""
+  layout: "auto"
+  bucket_glob: "bucket_*"
+  manifest_name: "labels.csv"
+  image_size: 64
+  num_workers: 0
+
+synthetic:
+  enabled: true
+  out_root: "./data/synth_CLEAR"
+  layout: "imagefolder"
+  num_buckets: 6
+  num_classes: 11
+  imgs_per_class_per_bucket: 20
+  seed: 123
+
+model:
+  backbone: "resnet18"
+  feature_dim: 512
+  num_classes: "auto"
+  head: "linear"
+
+train:
+  device: "cpu"
+  batch_size: 64
+  epochs_per_bucket: 1
+  lr: 0.001
+  weight_decay: 0.0005
+  log_every: 50
+
+replay:
+  enabled: true
+  ratio: 0.30
+  buffer_size: 2000
+  strategy: "reservoir"
+  alpha: 1.0
+  per_class_cap: 50
+
+inemo_like:
+  enabled: true
+  prototypes:
+    enabled: true
+    momentum: 0.9
+  latent_partition:
+    enabled: false
+    strength: 0.05
+    margin: 0.2
+
+eval:
+  protocol: "streaming"
+  shadow_holdout_ratio: 0.0
+  compute_forgetting: true
+
+logging:
+  out_dir: "./runs"
+  save_model: false
+  save_class_map: true
+  make_plots: true
