@@ -2,20 +2,20 @@ seed: 42
 
 data:
   # Set to your CLEAR root; if empty or missing, synthetic data can be generated.
-  root: ""
+  root: "./data/synth_CLEAR_delivery_v1"
   layout: "auto"              # auto | imagefolder | manifest_csv
   bucket_glob: "bucket_*"     # how to discover time buckets
   manifest_name: "labels.csv" # used when layout == manifest_csv
-  image_size: 224
-  num_workers: 4
+  image_size: 64
+  num_workers: 0
 
 synthetic:
   enabled: true
-  out_root: "./data/synth_CLEAR"
+  out_root: "./data/synth_CLEAR_delivery_v1"
   layout: "imagefolder"       # imagefolder | manifest_csv
   num_buckets: 6
   num_classes: 11
-  imgs_per_class_per_bucket: 20
+  imgs_per_class_per_bucket: 40
   seed: 123
 
 model:
@@ -27,7 +27,7 @@ model:
 train:
   device: "cuda"
   batch_size: 64
-  epochs_per_bucket: 1
+  epochs_per_bucket: 2
   lr: 0.001
   weight_decay: 0.0005
   log_every: 50
@@ -45,14 +45,15 @@ inemo_like:
   prototypes:
     enabled: true
     momentum: 0.9
+    strength: 0.05
   latent_partition:
     enabled: true
-    strength: 0.05
-    margin: 0.2
+    strength: 0.03
+    margin: 0.15
 
 eval:
   protocol: "streaming"       # streaming | iid_like
-  shadow_holdout_ratio: 0.0   # >0 enables retention/forgetting curves
+  shadow_holdout_ratio: 0.2   # >0 enables retention/forgetting curves
   compute_forgetting: true
 
 logging:

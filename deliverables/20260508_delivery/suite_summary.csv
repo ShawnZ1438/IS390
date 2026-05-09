@@ -1,0 +1,5 @@
+label,config_path,run_id,run_dir,mean_nda,best_nda,last_nda,last_mean_shadow_acc,last_mean_shadow_forgetting,max_shadow_forgetting
+replay_plus_prototypes,D:\Projects\IS390\configs\replay_plus_prototypes.yaml,20260508-233218,D:\Projects\IS390\runs\20260508-233218,0.4245454545454545,0.9,0.9,0.9886364000000001,0.0,0.0
+full_inemo_proxy,D:\Projects\IS390\configs\full_inemo_proxy.yaml,20260508-233242,D:\Projects\IS390\runs\20260508-233242,0.42409090909090913,0.7545454545454545,0.7545454545454545,0.7886364,0.0,0.0
+finetune_only,D:\Projects\IS390\configs\finetune_only.yaml,20260508-233134,D:\Projects\IS390\runs\20260508-233134,0.4154545454545454,0.9090909090909091,0.9090909090909091,0.515909,0.0,0.0
+replay_baseline,D:\Projects\IS390\configs\replay_baseline.yaml,20260508-233155,D:\Projects\IS390\runs\20260508-233155,0.3568181818181818,0.6522727272727272,0.4681818181818182,0.45909079999999997,0.0,0.0

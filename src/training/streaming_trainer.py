@@ -6,8 +6,11 @@ from torch.optim import AdamW
 from tqdm import tqdm
 from src.memory.replay_buffer import ReplayBuffer, ReplayConfig
 from src.memory.prototypes import PrototypeMemory, PrototypeConfig
-from src.training.losses import latent_partition_loss
-from src.training.metrics import accuracy
+from src.training.losses import (
+    margin_separation_loss,
+    positional_regularization_loss,
+)
+from src.training.metrics import accuracy, num_correct
 
 @dataclass
 class TrainConfig:
@@ -23,6 +26,7 @@ class InemoLikeConfig:
     enabled: bool = True
     prototypes_enabled: bool = True
     proto_momentum: float = 0.9
+    prototype_strength: float = 0.05
     latent_partition_enabled: bool = True
     partition_strength: float = 0.05
     partition_margin: float = 0.2
@@ -102,19 +106,25 @@ class StreamingTrainer:
                     with torch.no_grad():
                         self.proto_mem.update(feats[:cur_bs], y[:cur_bs])
                 
-                # iNeMo-inspired: latent partition loss (positional + separation)
-                if (
-                    self.inemo.enabled
-                    and self.inemo.latent_partition_enabled
-                    and self.proto_mem is not None
-                ):
+                if self.inemo.enabled and self.proto_mem is not None:
                     proto_mat, proto_keys = self.proto_mem.get_matrix(self.device)
-                    lp = latent_partition_loss(
-                        feats, y_mix, proto_mat, proto_keys,
-                        margin=self.inemo.partition_margin
-                    )
-                    if torch.isfinite(lp):
-                        loss = loss + self.inemo.partition_strength * lp
+                    if self.inemo.prototype_strength > 0:
+                        proto_loss = positional_regularization_loss(
+                            feats, y_mix, proto_mat, proto_keys
+                        )
+                        if torch.isfinite(proto_loss):
+                            loss = loss + self.inemo.prototype_strength * proto_loss
+
+                    if self.inemo.latent_partition_enabled:
+                        sep_loss = margin_separation_loss(
+                            feats,
+                            y_mix,
+                            proto_mat,
+                            proto_keys,
+                            margin=self.inemo.partition_margin,
+                        )
+                        if torch.isfinite(sep_loss):
+                            loss = loss + self.inemo.partition_strength * sep_loss
 
                 if not torch.isfinite(loss):
                     self.optim.zero_grad(set_to_none=True)
@@ -136,10 +146,12 @@ class StreamingTrainer:
     def eval_loader(self, loader) -> float:
         self.backbone.eval()
         self.head.eval()
-        accs = []
+        total_correct = 0
+        total_samples = 0
         for x, y in loader:
             x = x.to(self.device, non_blocking=True)
             y = y.to(self.device, non_blocking=True)
             _, logits = self.forward(x)
-            accs.append(accuracy(logits, y))
-        return float(sum(accs) / max(1, len(accs)))
+            total_correct += num_correct(logits, y)
+            total_samples += int(y.size(0))
+        return float(total_correct / max(1, total_samples))

@@ -1,7 +1,7 @@
 seed: 42
 
 data:
-  root: ""
+  root: "./data/synth_CLEAR_delivery_v1"
   layout: "auto"
   bucket_glob: "bucket_*"
   manifest_name: "labels.csv"
@@ -10,11 +10,11 @@ data:
 
 synthetic:
   enabled: true
-  out_root: "./data/synth_CLEAR"
+  out_root: "./data/synth_CLEAR_delivery_v1"
   layout: "imagefolder"
   num_buckets: 6
   num_classes: 11
-  imgs_per_class_per_bucket: 20
+  imgs_per_class_per_bucket: 40
   seed: 123
 
 model:
@@ -24,9 +24,9 @@ model:
   head: "linear"
 
 train:
-  device: "cpu"
+  device: "cuda"
   batch_size: 64
-  epochs_per_bucket: 1
+  epochs_per_bucket: 2
   lr: 0.001
   weight_decay: 0.0005
   log_every: 50
@@ -51,7 +51,7 @@ inemo_like:
 
 eval:
   protocol: "streaming"
-  shadow_holdout_ratio: 0.0
+  shadow_holdout_ratio: 0.2
   compute_forgetting: true
 
 logging:

@@ -7,6 +7,12 @@ def accuracy(logits: torch.Tensor, y: torch.Tensor) -> float:
     pred = torch.argmax(logits, dim=1)
     return float((pred == y).float().mean().item())
 
+
+@torch.no_grad()
+def num_correct(logits: torch.Tensor, y: torch.Tensor) -> int:
+    pred = torch.argmax(logits, dim=1)
+    return int((pred == y).sum().item())
+
 @dataclass
 class StreamingLog:
     nda_by_step: Dict[int, float] = field(default_factory=dict)

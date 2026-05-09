@@ -3,6 +3,7 @@ import csv
 import json
 import argparse
 import yaml
+import torch
 from src.utils import set_seed, ensure_dir, now_ts
 from src.data.clear_dataset import ClearDataConfig, make_bucket_loaders
 from src.data.synthetic_clear import SyntheticSpec, generate_synthetic
@@ -13,6 +14,12 @@ from src.training.streaming_trainer import (
 )
 from src.memory.replay_buffer import ReplayConfig
 from src.training.metrics import ForgettingLog
+from src.reporting import (
+    plot_shadow_metrics,
+    plot_streaming_metrics,
+    read_shadow_metrics,
+    summarize_shadow_by_step,
+)
 
 
 def _as_bool(x):
@@ -46,11 +53,29 @@ def _infer_num_classes(cfg, class_to_idx):
     return int(v)
 
 
+def _shadow_summary(shadow_path: str):
+    if not shadow_path or not os.path.isfile(shadow_path):
+        return None
+    rows = read_shadow_metrics(shadow_path)
+    if not rows:
+        return None
+    by_step = summarize_shadow_by_step(rows)
+    return {
+        "num_rows": len(rows),
+        "last_mean_shadow_acc": by_step["mean_acc"][-1],
+        "last_mean_shadow_forgetting": by_step["mean_forgetting"][-1],
+        "max_shadow_forgetting": max(by_step["max_forgetting"]),
+    }
+
+
 def main(cfg_path: str = "configs/base.yaml"):
     with open(cfg_path, "r") as f:
         cfg = yaml.safe_load(f)
     set_seed(int(cfg.get("seed", 42)))
     _maybe_generate_synthetic(cfg)
+    protocol = cfg["eval"].get("protocol", "streaming")
+    if protocol not in {"streaming", "iid_like"}:
+        raise ValueError(f"Unsupported eval.protocol: {protocol}")
     out_dir = ensure_dir(os.path.join(cfg["logging"]["out_dir"], now_ts()))
     with open(os.path.join(out_dir, "config_resolved.yaml"), "w") as f:
         yaml.safe_dump(cfg, f)
@@ -112,6 +137,9 @@ def main(cfg_path: str = "configs/base.yaml"):
         proto_momentum=float(
             inemo_raw.get("prototypes", {}).get("momentum", 0.9)
         ),
+        prototype_strength=float(
+            inemo_raw.get("prototypes", {}).get("strength", 0.05)
+        ),
         latent_partition_enabled=_as_bool(
             inemo_raw.get("latent_partition", {}).get("enabled", True)
         ),
@@ -141,6 +169,9 @@ def main(cfg_path: str = "configs/base.yaml"):
     metrics_path = os.path.join(out_dir, "metrics_streaming.csv")
     f_shadow = ForgettingLog()
     shadow_path = os.path.join(out_dir, "metrics_shadow.csv")
+    nda_plot_path = os.path.join(out_dir, "nda.png")
+    shadow_plot_path = os.path.join(out_dir, "shadow.png")
+    model_path = os.path.join(out_dir, "model_final.pt")
 
     with open(metrics_path, "w", newline="") as f:
         w = csv.writer(f)
@@ -154,24 +185,26 @@ def main(cfg_path: str = "configs/base.yaml"):
             ]
         )
         nda_vals = []
-        # Streaming: train on i, test on i+1
-        for i in range(len(train_loaders) - 1):
+        num_steps = len(train_loaders) - 1 if protocol == "streaming" else len(train_loaders)
+        for i in range(num_steps):
             trainer.train_one_bucket(train_loaders[i], bucket_idx=i)
-            nda = trainer.eval_loader(eval_full_loaders[i + 1])
+            eval_idx = i + 1 if protocol == "streaming" else i
+            nda = trainer.eval_loader(eval_full_loaders[eval_idx])
             nda_vals.append(nda)
             mean_nda = sum(nda_vals) / len(nda_vals)
             w.writerow(
                 [
                     i,
                     buckets[i].name,
-                    buckets[i + 1].name,
+                    buckets[eval_idx].name,
                     f"{nda:.6f}",
                     f"{mean_nda:.6f}",
                 ]
             )
+            metric_name = "NDA" if protocol == "streaming" else "Eval"
             print(
                 f"[step {i}] train={buckets[i].name} "
-                f"test_next={buckets[i+1].name} NDA={nda:.4f}"
+                f"test={buckets[eval_idx].name} {metric_name}={nda:.4f}"
             )
 
     # Optional: "shadow" forgetting metrics (requires holdout_ratio > 0)
@@ -182,7 +215,7 @@ def main(cfg_path: str = "configs/base.yaml"):
             w.writerow(
                 ["after_step", "bucket_eval", "shadow_acc", "shadow_forgetting"]
             )
-            for i in range(len(train_loaders) - 1):
+            for i in range(num_steps):
                 # After training steps, evaluate all prior shadow sets up to i
                 for j in range(i + 1):
                     if shadow_loaders[j] is None:
@@ -197,15 +230,60 @@ def main(cfg_path: str = "configs/base.yaml"):
                             f"{forgetting:.6f}",
                         ]
                     )
+    else:
+        shadow_path = None
+
+    if cfg["logging"].get("make_plots", True):
+        plot_streaming_metrics(
+            metrics_path,
+            nda_plot_path,
+            title=f"NDA - {os.path.basename(cfg_path)}",
+        )
+        if shadow_path and os.path.isfile(shadow_path):
+            plot_shadow_metrics(
+                shadow_path,
+                shadow_plot_path,
+                title=f"Shadow Holdout - {os.path.basename(cfg_path)}",
+            )
+        else:
+            shadow_plot_path = None
+    else:
+        nda_plot_path = None
+        shadow_plot_path = None
+
+    if cfg["logging"].get("save_model", False):
+        torch.save(
+            {
+                "backbone": trainer.backbone.state_dict(),
+                "head": trainer.head.state_dict(),
+                "config": cfg,
+                "class_to_idx": class_to_idx,
+            },
+            model_path,
+        )
+    else:
+        model_path = None
 
     # Save a compact run summary
+    mean_nda = sum(nda_vals) / max(1, len(nda_vals))
     summary = {
+        "config_path": cfg_path,
         "out_dir": out_dir,
+        "run_id": os.path.basename(out_dir),
+        "protocol": protocol,
         "num_buckets": len(buckets),
         "num_classes": num_classes,
+        "mean_nda": mean_nda,
+        "best_nda": max(nda_vals) if nda_vals else None,
+        "last_nda": nda_vals[-1] if nda_vals else None,
+        "per_step_nda": nda_vals,
         "metrics_streaming_csv": metrics_path,
-        "metrics_shadow_csv": shadow_path if (shadow_hold > 0) else None,
+        "metrics_shadow_csv": shadow_path,
         "class_map_json": class_map_path,
+        "nda_plot_png": nda_plot_path,
+        "shadow_plot_png": shadow_plot_path,
+        "model_final_pt": model_path,
+        "shadow_summary": _shadow_summary(shadow_path),
     }
     with open(os.path.join(out_dir, "run_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
