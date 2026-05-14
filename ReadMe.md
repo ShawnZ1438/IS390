@@ -75,7 +75,6 @@ This runs the four core configs and writes:
 
 ## Latest Delivery
 
-The current delivery-ready package produced on May 8, 2026 is in:
+The current delivery note is in:
 
-- [deliverables/20260508_delivery/PLAN.md](./deliverables/20260508_delivery/PLAN.md)
 - [deliverables/20260508_delivery/REPORT.md](./deliverables/20260508_delivery/REPORT.md)
