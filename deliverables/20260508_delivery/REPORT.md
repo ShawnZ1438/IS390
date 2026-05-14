@@ -1,4 +1,4 @@
-# IS390 Delivery Report
+# IS390 Delivery 
 
 Date: 2026-05-08
 
@@ -104,7 +104,7 @@ repo, but it also limits how strongly the findings should be generalized.
 ## Interpretation
 
 Within this synthetic proxy, prototype memory is the most valuable addition.
-The extra latent-partition term helps the full proxy earlier in the stream, but
+The extra latent partition term helps the full proxy earlier in the stream, but
 with the current hyperparameters it does not beat prototype alignment alone on
 overall mean NDA.
 
@@ -114,19 +114,19 @@ compatible across buckets to surface classic catastrophic forgetting.
 
 ## Limitations
 
-- These are single-seed results.
+- These are single seed results.
 - The benchmark is synthetic, not a real CLEAR release.
 - Shadow forgetting is flat at zero, so the current proxy does not stress
   destructive interference enough.
 - `base.yaml` is configured as a practical default, not as a separate reported
   experiment beyond the `full_inemo_proxy` setup it mirrors.
 
-## Recommended Next Work
+## Next Steps
 
 1. Run the same suite across multiple seeds and report means and standard
    deviations.
 2. Increase benchmark antagonism so later buckets reduce accuracy on earlier
    shadow holdouts.
-3. Re-run the suite on a real CLEAR-style dataset if one becomes available.
+3. Re-run the suite on a full CLEAR style dataset if one becomes available.
 4. Tune prototype and partition strengths separately now that both are wired
    into training.
